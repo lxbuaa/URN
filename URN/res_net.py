@@ -8,12 +8,6 @@ import numpy as np
 import ssl
 import baal
 
-# from .drop_edge.models import My_GCNModel
-# from .mutal_attention.mutal_attention import Mutual_UACA
-# from C2F.um_w_net import Coarse_ResNet
-# from C2F.unet_model import Unet_MCD
-# from .unet_parts import outconv, RRU_down
-# from .common_block.bayar_conv import BayarConv
 from baal.bayesian import Dropout
 
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -189,8 +183,6 @@ class My_ResNet50(nn.Module):
             x = block(x)
             feature_map.append(x)  # 64, 32, 16, 16
 
-        # out = nn.AvgPool2d(x.shape[2:])(x).view(x.shape[0], -1)
-        # feature_map.append(out)  # 128
         return feature_map
 
 
@@ -207,7 +199,7 @@ class My_ResNet50_MCD(nn.Module):
         for i, num_this_layer in enumerate(layers_cfg):
             self.blocks.append(list(self.model.children())[num_this_layer])
 
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))  # output size = (1, 1)，自适应平均池化下采样
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))  # output size = (1, 1)
         self.fc = nn.Linear(2048, 1)
 
     # @torchsnooper.snoop()
@@ -225,85 +217,8 @@ class My_ResNet50_MCD(nn.Module):
             x = self.dropout(x)
             feature_map.append(x)
 
-        # x_cls = self.avgpool(x)  # 平均池化下采样
-        # x_cls = torch.flatten(x_cls, 1)  # 展平处理
-        # x_cls = self.fc(x_cls)  # 全连接
-
         return {
             "feature_map": feature_map,
             # "cls": x_cls
         }
 
-# class My_um_ResNet50(nn.Module):
-#     def __init__(self, pretrained=True, n_input=3, n_sample=5, dropout_rate=0.5, with_GNN=True, with_Attn=True):
-#         """Declare all needed layers."""
-#         super(My_um_ResNet50, self).__init__()
-#
-#         self.model = resnet(n_input=n_input, pretrained=pretrained, layers=[3, 4, 6, 3], backbone='resnet50')
-#         # self.um_model = resnet(n_input=n_input, pretrained=pretrained, layers=[3, 4, 6, 3], backbone='resnet50')
-#
-#         self.relu = self.model.relu  # Place a hook
-#
-#         # layers_cfg = [4, 5, 6, 7]
-#         layers_cfg = [4, 5, 6, 7]
-#         self.blocks = []
-#         for i, num_this_layer in enumerate(layers_cfg):
-#             self.blocks.append(list(self.model.children())[num_this_layer])
-#         # self.um_blocks = [list(self.um_model.children())[6], list(self.um_model.children())[7]]
-#
-#         # for i, num_this_layer in enumerate(layers_cfg):
-#         #     self.blocks.append(list(self.model.children())[num_this_layer])
-#         self.um_gcn = My_GCNModel(nfeat=5, nclass=1, dropout=0.2, nhidlayer=3, nhid=64 * 64, tensor_size=(64, 64),
-#                                   patch_size=(2, 2))
-#         # self.fca_down3 = self.um_blocks[0]
-#         # self.compress_fca_down3 = outconv(256, 32)
-#         # self.fca_down4 = self.um_blocks[1]
-#         self.fca_down3 = RRU_down(256 + 1, 256)
-#         self.compress_fca_down3 = outconv(256, 32)
-#         self.fca_down4 = RRU_down(256 + 512, 256)
-#         self.mutual_attn = Mutual_UACA(256, 256, 256)
-#         self.bayar_conv = BayarConv(in_channels=256, out_channels=256, padding=2)
-#         self.compress_fca_down4 = outconv(256, 64)
-#         self.fca_out = outconv(256, 1)
-#
-#     # @torchsnooper.snoop()
-#     def forward(self, x, var, mean):
-#         x_tmp = self.model.conv1(x)
-#         x_tmp = self.model.bn1(x_tmp)
-#         x1 = self.model.relu(x_tmp)  # 16, 64, 128, 128
-#         x2 = self.model.maxpool(x1)
-#         x2 = self.blocks[0](x2)  # 16, 256, 64, 64
-#         x3 = self.blocks[1](x2)  # 16, 512, 32, 32
-#         x4 = self.blocks[2](x3)  # 16, 1024, 16, 16
-#         # x4 = self.blocks[3](x3) # 16, 2048, 16, 16
-#
-#         var = F.interpolate(var, size=x2.shape[-2:], mode='bilinear', align_corners=False)
-#         x_mean = F.interpolate(mean, size=x2.shape[-2:], mode='bilinear', align_corners=False)
-#         x_rgb = F.interpolate(x, size=x2.shape[-2:], mode='bilinear', align_corners=False)
-#         x_gcn = self.um_gcn(x_mean, var, x_rgb)
-#
-#         x_uc_4 = self.fca_down3(torch.cat((x2, var), dim=1))
-#         x_uc_4_compress = self.compress_fca_down3(x_uc_4)
-#         x_uc_4_compress = self.relu(x_uc_4_compress + x_gcn * x_uc_4_compress)
-#
-#         x_uc_5 = self.fca_down4(torch.cat((x_uc_4, x3), dim=1))
-#         x_bayar_5 = self.bayar_conv(x_uc_5)
-#         x_uc_5 = self.mutual_attn(x_uc_5, x_bayar_5)
-#         x_uc_5_compress = self.compress_fca_down4(x_uc_5)
-#
-#         x_uc_out = self.fca_out(x_uc_5)
-#
-#         # out = nn.AvgPool2d(x.shape[2:])(x).view(x.shape[0], -1)
-#         # feature_map.append(out)  # 128
-#         return {
-#             "feature_map": [x1, x2, x3, x4],
-#             "um_feature_map": [x_uc_4_compress, x_uc_5_compress],
-#             "uc_out": x_uc_out,
-#             "uc_map": var
-#         }
-# constrain_features, _ = self.noise_extractor.base_forward(x)
-# if __name__ == '__main__':
-#     net = My_ResNet50()
-#     img = torch.rand((1, 3, 256, 256))
-#     fm, out = net(img)
-#     print(net(img))

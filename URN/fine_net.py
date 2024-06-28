@@ -101,7 +101,6 @@ class My_um_ResNet50(nn.Module):
         feature_map = []
         """B 64 H/2 H/2"""
         x = self.relu(self.model.relu(self.model.bn1(self.model.conv1(x))) + self.um_gcn_first(x, x_uc))
-        # TODO: 在这里加
         feature_map.append(x)  # 128
         """B 64 H/4 H/4"""
         x = self.model.maxpool(x)

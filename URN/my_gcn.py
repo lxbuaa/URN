@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 
-from UGNetv2 import ResGCNBlock, DenseGCNBlock, MultiLayerGCNBlock, InecptionGCNBlock, GraphConvolutionBS, \
+from URN.layers import ResGCNBlock, DenseGCNBlock, MultiLayerGCNBlock, InecptionGCNBlock, GraphConvolutionBS, \
     Dense
 
 
@@ -22,14 +22,12 @@ class GraphConvertor(nn.Module):
 
     # @torchsnooper.snoop()
     def forward(self, x_feat, x_var):
-        """uncertainty map分块，计算各个patch的确定性"""
         x_var_patch = self.patch_conv_um(
             F.interpolate(x_var, size=x_feat.shape[-2:], mode='bilinear', align_corners=False))
         # x_var_patch = torch.sigmoid(x_var_patch)
         # x_var_patch = torch.sigmoid(x_var_patch)
         x_var_patch = 1.0 - x_var_patch
         x_feat_patch = self.patch_conv_feat(x_feat)
-        # 每个batch计算一次node和edge，添加到list中
         node_list = []
         edge_list = []
         B, C, H, W = x_feat_patch.shape
@@ -37,7 +35,6 @@ class GraphConvertor(nn.Module):
             x_var_b = x_var_patch[b].squeeze(0)
             x_feat_b = x_feat_patch[b].view(-1, C)
             node_list.append(x_feat_b)
-            # 通过上、下、左、右移动var矩阵，并做差，即可得到寻找到满足连边规则的边：“连边规则为，每个点向周围确定性比自己低的点连边，边权为确定性之差”
             up_res = self.edge_checker(x_var_b, 'up')
             down_res = self.edge_checker(x_var_b, 'down')
             left_res = self.edge_checker(x_var_b, 'left')
@@ -77,33 +74,33 @@ class EdgeChecker(nn.Module):
     def forward(self, x, direction='up'):
         """
         :param x:
-        :param direction: 找所有比自己direction方向小的元素的连边
+        :param direction: 
         :return:
         """
         y = torch.zeros(x.shape).cuda()
         if direction == 'up':
-            y[:-1, :] = x[1:, :]  # 上移
+            y[:-1, :] = x[1:, :]  
             dir_shift = (1, 0)
         elif direction == 'down':
-            y[1:, :] = x[:-1, :]  # 下移
+            y[1:, :] = x[:-1, :]
             dir_shift = (-1, 0)
         elif direction == 'left':
-            y[:, :-1] = x[:, 1:]  # 左移
+            y[:, :-1] = x[:, 1:]
             dir_shift = (0, 1)
         elif direction == 'right':
-            y[:, 1:] = x[:, :-1]  # 右移
+            y[:, 1:] = x[:, :-1]
             dir_shift = (0, -1)
         elif direction == 'up_left':
-            y[:-1, :-1] = x[1:, 1:]  # 上移+左移
+            y[:-1, :-1] = x[1:, 1:]
             dir_shift = (1, 1)
         elif direction == 'up_right':
-            y[:-1, 1:] = x[1:, :-1]  # 上移+右移
+            y[:-1, 1:] = x[1:, :-1]
             dir_shift = (1, -1)
         elif direction == 'down_left':
-            y[1:, :-1] = x[:-1, 1:]  # 上移+左移
+            y[1:, :-1] = x[:-1, 1:]
             dir_shift = (-1, 1)
         elif direction == 'down_right':
-            y[1:, 1:] = x[:-1, :-1]  # 上移+右移
+            y[1:, 1:] = x[:-1, :-1]
             dir_shift = (-1, -1)
 
         y = y - x
@@ -127,7 +124,7 @@ class EdgeChecker(nn.Module):
         return res_dict
 
 
-class PatchConv(nn.Module):  # 1*1卷积用来切块，步长=卷积核长
+class PatchConv(nn.Module):  
     def __init__(self, kernel_size=(4, 4), num_channel=1):
         super(PatchConv, self).__init__()
         # self.stride = kernel_size[0]
@@ -242,42 +239,29 @@ class My_GCNModel(nn.Module):
 
     # @torchsnooper.snoop()
     def forward(self, x_feat, x_var):
-        # 将特征图转为图
         graph = self.graph_convert(x_feat, x_var)
         x_list = []
         for fea, adj in zip(graph['node_list'], graph['edge_list']):
             fea = fea.cuda()
             adj = adj.cuda()
-            # print(adj)
-            # 初始图卷积层
             x = self.ingc(fea, adj)
             x = F.dropout(x, self.dropout, training=self.training)
-            # 中间图卷积层
             for i in range(len(self.midlayer)):
                 midgc = self.midlayer[i]
                 x = midgc(x, adj)
-            # 输出图卷积层
             x = self.outgc(x, adj)
-            x = x.view(self.nclass, self.feature_map_size[0], self.feature_map_size[1])  # TODO: 这里reshape的不一定对，重新检查
+            x = x.view(self.nclass, self.feature_map_size[0], self.feature_map_size[1]) 
             # x = x.unsqueeze(0)
             x_list.append(x)
-        x_list = torch.stack(x_list, dim=0)  # 图中每个node的分类结果，(B, 1, H, W)
+        x_list = torch.stack(x_list, dim=0)
         return x_list
 
-
-# class MyViG(nn.Module)
 
 
 if __name__ == '__main__':
     tensor = torch.rand((2, 3, 16, 16)).cuda()
     um = torch.rand((2, 1, 32, 32)).cuda()
 
-    # tensor = torch.tensor([[6, 2, 3],
-    #                        [4, 9, 6],
-    #                        [7, 8, 9]]).cuda()
-    #
-    # # 获取张量的尺寸
-    # print(tensor.shape)
     e = My_GCNModel(nfeat=3, nclass=3, dropout=0.2, nhidlayer=1, nhid=64, tensor_size=(16, 16),
                     patch_size=(2, 2)).cuda()
     res = e(um, tensor)

@@ -9,7 +9,7 @@ from sklearn import metrics
 
 
 class AverageMeter(object):
-    """用于单个指标的更新、查看"""
+    """used for a single metric"""
 
     def __init__(self):
         self.val = 0
@@ -32,25 +32,24 @@ class AverageMeter(object):
 
 
 class MetricCollector(object):
-    """管理多个指标"""
+    """used to manage multiple metrics"""
 
     def __init__(self):
-        """分割指标"""
         self.metrics = easydict.EasyDict({
-            "seg": {  # 分割指标
+            "seg": {  # segmentation metrics
                 "f1_seg": AverageMeter(),
                 "mcc_seg": AverageMeter(),
             },
-            "cls": {  # 分类指标
+            "cls": {  # classification metric
                 "auc_cls": AverageMeter(),
                 "acc_cls": AverageMeter(),
             }
         })
         self.save = easydict.EasyDict({
             "seg": {
-                "pred_binary": [],  # 二值化之后的pred
-                "pred_raw": [],  # 二值化之前的pred
-                "gt": []  # groundtruth
+                "pred_binary": [],  
+                "pred_raw": [], 
+                "gt": []
             },
             "cls": {
                 "pred_binary": [],
@@ -132,7 +131,6 @@ def calculate_img_score(pd, gt):
 
 
 def calculate_pixel_f1(pd, gt):
-    """学MVSS，如果全黑的预测对了，指标置1，如果全白的预测错了，指标置0"""
     if np.max(pd) == np.max(gt) and np.max(pd) == 0:
         res_dict = easydict.EasyDict({
             "f1": 1.0,
